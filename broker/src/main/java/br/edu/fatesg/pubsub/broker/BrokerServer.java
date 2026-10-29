@@ -61,14 +61,16 @@ public class BrokerServer {
         running = true;
         LOG.info("Broker escutando na porta " + serverSocket.getLocalPort());
 
-        while (running) {
+        // Checa também isClosed(): se o stop() rodar antes do "running = true" acima,
+        // o socket já estará fechado e o loop termina em vez de girar para sempre.
+        while (running && !serverSocket.isClosed()) {
             try {
                 Socket client = serverSocket.accept();
                 LOG.info("Cliente conectado: " + client.getRemoteSocketAddress());
                 pool.submit(() -> atender(client));
             } catch (SocketException e) {
                 // accept() lança SocketException quando o ServerSocket é fechado pelo stop()
-                if (running) {
+                if (running && !serverSocket.isClosed()) {
                     LOG.log(Level.SEVERE, "Erro no ServerSocket", e);
                 }
             } catch (IOException e) {
