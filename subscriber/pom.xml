@@ -25,4 +25,18 @@
         </dependency>
     </dependencies>
 
+    <build>
+        <plugins>
+            <!-- Permite rodar com: mvn -pl subscriber exec:java [-Dexec.args="localhost 5000"] -->
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <version>3.2.0</version>
+                <configuration>
+                    <mainClass>br.edu.fatesg.pubsub.subscriber.SubscriberMain</mainClass>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+
 </project>
