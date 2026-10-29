@@ -1,9 +1,11 @@
 package br.edu.fatesg.pubsub.broker;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.io.IOException;
 import java.net.Socket;
 import java.util.ArrayList;
 import java.util.List;
@@ -16,6 +18,7 @@ import org.junit.jupiter.api.Test;
 class BrokerServerTest {
 
     private BrokerServer server;
+    private Thread threadDoServidor;
     private final List<Socket> clientes = new ArrayList<>();
 
     @AfterEach
@@ -31,15 +34,15 @@ class BrokerServerTest {
     /** Sobe o servidor numa thread própria, em porta livre, e espera ele começar a escutar. */
     private void iniciar(BrokerServer s) throws InterruptedException {
         server = s;
-        Thread t = new Thread(() -> {
+        threadDoServidor = new Thread(() -> {
             try {
                 server.start();
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }
         });
-        t.setDaemon(true);
-        t.start();
+        threadDoServidor.setDaemon(true);
+        threadDoServidor.start();
         long limite = System.currentTimeMillis() + 5000;
         while (server.getLocalPort() <= 0 && System.currentTimeMillis() < limite) {
             Thread.sleep(10);
@@ -65,7 +68,7 @@ class BrokerServerTest {
         }));
 
         for (int i = 0; i < total; i++) {
-            clientes.add(new Socket("localhost", server.getLocalPort()));
+            conectar();
         }
 
         assertTrue(todosConectados.await(5, TimeUnit.SECONDS),
@@ -74,36 +77,56 @@ class BrokerServerTest {
     }
 
     @Test
-    void erroEmUmClienteNaoDerrubaOBroker() throws Exception {
+    void erroEmUmClienteFechaSoAqueleSocketENaoDerrubaOBroker() throws Exception {
         CountDownLatch atendidos = new CountDownLatch(2);
         iniciar(new BrokerServer(0, socket -> {
             atendidos.countDown();
             throw new RuntimeException("falha simulada");
         }));
 
-        // O primeiro handler lança exceção; o segundo cliente ainda precisa ser atendido
-        clientes.add(new Socket("localhost", server.getLocalPort()));
-        long limite = System.currentTimeMillis() + 5000;
-        while (atendidos.getCount() == 2 && System.currentTimeMillis() < limite) {
-            Thread.sleep(10);
-        }
-        clientes.add(new Socket("localhost", server.getLocalPort()));
+        // 1º cliente: o handler lança exceção e o broker deve fechar o socket dele
+        Socket primeiro = conectar();
+        primeiro.setSoTimeout(5000);
+        assertEquals(-1, primeiro.getInputStream().read(), "socket do cliente com erro não foi fechado");
 
-        assertTrue(atendidos.await(5, TimeUnit.SECONDS));
+        // 2º cliente: o broker continua aceitando conexões normalmente
+        conectar();
+        assertTrue(atendidos.await(5, TimeUnit.SECONDS), "broker parou de atender após o erro");
         assertTrue(server.isRunning());
+    }
+
+    @Test
+    void stopEncerraOLoopDoServidor() throws Exception {
+        iniciar(new BrokerServer(0, socket -> { }));
+
+        server.stop();
+
+        // start() deve sair do loop de accept() e a thread do servidor terminar
+        threadDoServidor.join(5000);
+        assertFalse(threadDoServidor.isAlive(), "start() não retornou após stop()");
+        assertFalse(server.isRunning());
     }
 
     @Test
     void rejeitaPortaInvalida() {
         assertThrows(IllegalArgumentException.class, () -> new BrokerServer(70000, s -> { }));
         assertThrows(IllegalArgumentException.class, () -> new BrokerServer(-1, s -> { }));
+        assertThrows(IllegalArgumentException.class, () -> new BrokerServer(5000, null));
     }
 
     @Test
     void resolvePortaPorArgumentoOuPadrao() {
         assertEquals(6000, BrokerMain.resolvePort(new String[] {"6000"}));
+        assertEquals(6000, BrokerMain.resolvePort(new String[] {" 6000 "}));
+        assertThrows(IllegalArgumentException.class, () -> BrokerMain.resolvePort(new String[] {"abc"}));
         if (System.getenv("BROKER_PORT") == null) {
             assertEquals(BrokerMain.DEFAULT_PORT, BrokerMain.resolvePort(new String[0]));
         }
+    }
+
+    private Socket conectar() throws IOException {
+        Socket s = new Socket("localhost", server.getLocalPort());
+        clientes.add(s);
+        return s;
     }
 }
