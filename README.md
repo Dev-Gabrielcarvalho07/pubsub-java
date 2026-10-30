@@ -6,10 +6,10 @@ Implementação em Java do modelo **Publish/Subscribe (Pub/Sub)** para a discipl
 
 | Integrante | Papel no projeto |
 |---|---|
-| Gabriel Carvalho | Tech lead; módulo `common`, subscriber, diagramas e integração |
-| João Pedro Abdala | Broker e tratamento das conexões de clientes |
-| Yan Santos | Registro de tópicos, roteamento e testes do registry |
-| Maria Eduarda | Publisher e documentação de execução |
+| Gabriel Carvalho | Tech lead; #1 `common`, #7 subscriber, #9 diagramas e #10 integração |
+| João Pedro Abdala | #2 `BrokerServer`, #3 `ClientHandler` e #4 `TopicRegistry` |
+| Yan Santos | #5 testes do `TopicRegistry` |
+| Maria Eduarda | #6 publisher e #8 README |
 
 ## Tecnologias e pré-requisitos
 
@@ -40,6 +40,14 @@ Na pasta raiz do repositório, compile e instale os módulos:
 mvn clean install
 ```
 
+## Testes
+
+Para executar os testes automatizados de todos os módulos:
+
+```bash
+mvn test
+```
+
 ## Como rodar
 
 Inicie cada programa em um terminal separado, sempre a partir da pasta raiz.
@@ -49,7 +57,7 @@ Inicie cada programa em um terminal separado, sempre a partir da pasta raiz.
 Inicie o broker na porta padrão `5000`:
 
 ```bash
-mvn -pl broker exec:java -Dexec.args="5000"
+mvn -pl broker exec:java "-Dexec.args=5000"
 ```
 
 ### 2. Subscriber
