@@ -6,9 +6,9 @@ Implementação em Java do modelo **Publish/Subscribe (Pub/Sub)** para a discipl
 
 | Integrante | Papel no projeto |
 |---|---|
-| Gabriel Carvalho | Tech lead; #1 `common`, #7 subscriber, #9 diagramas e #10 integração |
-| João Pedro Abdala | #2 `BrokerServer`, #3 `ClientHandler` e #4 `TopicRegistry` |
-| Yan Santos | #5 testes do `TopicRegistry` |
+| Gabriel Carvalho de Oliveira | Tech lead; #1 `common`, #3 `ClientHandler`, #5 testes do `TopicRegistry`, #7 subscriber, #9 diagramas e #10 integração |
+| João Pedro Abdala | #2 `BrokerServer` e #4 `TopicRegistry` |
+| Yan Santos | Apresentação do fluxo de dados e das garantias de entrega |
 | Maria Eduarda | #6 publisher e #8 README |
 
 ## Tecnologias e pré-requisitos
@@ -85,8 +85,6 @@ mvn -pl publisher exec:java "-Dexec.args=localhost 5000"
 ```
 
 Quando solicitado, informe o tópico `avisos` e depois digite a mensagem. Para encerrar, digite `sair` no campo de tópico.
-
-> O encaminhamento completo entre publisher e subscriber depende da integração do `ClientHandler` ao broker (issue #3). Até essa integração, os comandos de terminal e o protocolo estão definidos, mas o fluxo de ponta a ponta ainda não está concluído.
 
 ### Executar clientes em outros computadores
 
