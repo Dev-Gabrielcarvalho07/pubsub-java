@@ -4,12 +4,11 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
     <parent>
-        <groupId>br.edu.fatesgpubsub</groupId>
+        <groupId>br.edu.fatesg.pubsub</groupId>
         <artifactId>pubsub-java</artifactId>
         <version>1.0-SNAPSHOT</version>
     </parent>
 
-    <groupId>br.edu.fatesg.pubsub</groupId>
     <artifactId>broker</artifactId>
 
     <properties>
@@ -20,20 +19,19 @@
 
     <dependencies>
         <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>common</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
-            <version>5.10.2</version>
             <scope>test</scope>
         </dependency>
     </dependencies>
 
     <build>
         <plugins>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-surefire-plugin</artifactId>
-                <version>3.2.5</version>
-            </plugin>
             <!-- Permite rodar com: mvn -pl broker exec:java [-Dexec.args="6000"] -->
             <plugin>
                 <groupId>org.codehaus.mojo</groupId>
