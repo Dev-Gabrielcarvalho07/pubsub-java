@@ -5,8 +5,11 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.net.Socket;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
@@ -105,6 +108,33 @@ class BrokerServerTest {
         threadDoServidor.join(5000);
         assertFalse(threadDoServidor.isAlive(), "start() não retornou após stop()");
         assertFalse(server.isRunning());
+    }
+
+    @Test
+    void stopDesconectaClientesEDestravaHandlerPresoNoReadLine() throws Exception {
+        CountDownLatch handlerLendo = new CountDownLatch(1);
+        CountDownLatch handlerSaiuDoReadLine = new CountDownLatch(1);
+        iniciar(new BrokerServer(0, socket -> {
+            try {
+                BufferedReader in = new BufferedReader(
+                        new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
+                handlerLendo.countDown();
+                in.readLine(); // fica bloqueado: o cliente nunca envia nada
+            } catch (IOException e) {
+                // esperado: o stop() fecha o socket
+            } finally {
+                handlerSaiuDoReadLine.countDown();
+            }
+        }));
+        conectar();
+        assertTrue(handlerLendo.await(5, TimeUnit.SECONDS), "handler não começou a ler");
+
+        long inicio = System.nanoTime();
+        server.stop();
+        long duracaoMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - inicio);
+
+        assertTrue(duracaoMs < 2000, "stop() demorou " + duracaoMs + " ms");
+        assertTrue(handlerSaiuDoReadLine.await(1, TimeUnit.SECONDS), "handler continuou preso no readLine()");
     }
 
     @Test
