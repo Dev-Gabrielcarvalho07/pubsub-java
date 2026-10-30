@@ -23,6 +23,25 @@
             <artifactId>common</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
+
+    <build>
+        <plugins>
+            <!-- Permite rodar com: mvn -pl publisher exec:java [-Dexec.args="192.168.1.10 5000"] -->
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <version>3.2.0</version>
+                <configuration>
+                    <mainClass>br.edu.fatesg.pubsub.publisher.PublisherMain</mainClass>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
 
 </project>
