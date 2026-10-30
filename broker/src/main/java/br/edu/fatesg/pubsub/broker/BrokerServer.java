@@ -4,8 +4,11 @@ import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketException;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import java.util.logging.Level;
@@ -30,6 +33,9 @@ public class BrokerServer {
     private final int port;
     private final Consumer<Socket> clientHandler;
     private final ExecutorService pool;
+    // Sockets dos clientes em atendimento: o stop() fecha todos para destravar
+    // as threads paradas no readLine() (interromper a thread não basta).
+    private final Set<Socket> clientesConectados = ConcurrentHashMap.newKeySet();
 
     private volatile ServerSocket serverSocket;
     private volatile boolean running;
@@ -67,7 +73,17 @@ public class BrokerServer {
             try {
                 Socket client = serverSocket.accept();
                 LOG.info("Cliente conectado: " + client.getRemoteSocketAddress());
+                clientesConectados.add(client);
+                // Se o stop() rodou entre o accept() e o add(), ele já não vê este socket
+                if (!running) {
+                    clientesConectados.remove(client);
+                    fecharSemErro(client);
+                    break;
+                }
                 pool.submit(() -> atender(client));
+            } catch (RejectedExecutionException e) {
+                // pool já encerrado pelo stop(); o laço termina na próxima verificação
+                fecharClientesConectados();
             } catch (SocketException e) {
                 // accept() lança SocketException quando o ServerSocket é fechado pelo stop()
                 if (running && !serverSocket.isClosed()) {
@@ -86,10 +102,15 @@ public class BrokerServer {
             clientHandler.accept(client);
         } catch (Exception e) {
             LOG.log(Level.WARNING, "Erro ao atender cliente " + client.getRemoteSocketAddress(), e);
+        } finally {
+            clientesConectados.remove(client);
         }
     }
 
-    /** Para de aceitar conexões, fecha o ServerSocket e encerra o pool de threads. */
+    /**
+     * Para de aceitar conexões, fecha o ServerSocket, desconecta os clientes ainda
+     * conectados e encerra o pool de threads.
+     */
     public void stop() {
         running = false;
         try {
@@ -99,6 +120,8 @@ public class BrokerServer {
         } catch (IOException e) {
             LOG.log(Level.WARNING, "Erro ao fechar o ServerSocket", e);
         }
+        // Fechar o socket faz o readLine() do handler lançar exceção e a thread terminar
+        fecharClientesConectados();
         pool.shutdownNow();
         try {
             pool.awaitTermination(5, TimeUnit.SECONDS);
@@ -106,6 +129,20 @@ public class BrokerServer {
             Thread.currentThread().interrupt();
         }
         LOG.info("Broker encerrado");
+    }
+
+    private void fecharClientesConectados() {
+        for (Socket client : clientesConectados) {
+            fecharSemErro(client);
+        }
+    }
+
+    private static void fecharSemErro(Socket client) {
+        try {
+            client.close();
+        } catch (IOException e) {
+            // ignorado: o cliente já está sendo desconectado
+        }
     }
 
     /** Porta em que o broker está escutando de fato (útil quando foi iniciado com porta 0). */

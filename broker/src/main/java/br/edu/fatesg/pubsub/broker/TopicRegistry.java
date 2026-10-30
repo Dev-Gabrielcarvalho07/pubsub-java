@@ -40,14 +40,14 @@ public class TopicRegistry {
             conjunto.add(subscriber);
             return conjunto;
         });
-        LOG.info("SUB: cliente inscrito no tópico '" + topic + "'");
+        LOG.info("SUB: cliente " + subscriber + " inscrito no tópico '" + topic + "'");
     }
 
     /** UNSUB: remove o cliente do tópico. Se o tópico ficar sem inscritos, ele é apagado. */
     public void unsubscribe(String topic, Subscriber subscriber) {
         validar(topic, subscriber);
         remover(topic, subscriber);
-        LOG.info("UNSUB: cliente removido do tópico '" + topic + "'");
+        LOG.info("UNSUB: cliente " + subscriber + " removido do tópico '" + topic + "'");
     }
 
     /**
