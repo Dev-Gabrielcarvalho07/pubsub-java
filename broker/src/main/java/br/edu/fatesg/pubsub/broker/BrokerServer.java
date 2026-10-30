@@ -15,16 +15,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- * Servidor TCP do broker.
- *
- * <p>Abre um {@link ServerSocket} na porta informada e fica aceitando conexões
- * de publishers e subscribers. Cada cliente aceito é atendido em uma thread
- * separada de um {@link ExecutorService}, assim o laço de {@code accept()}
- * nunca fica bloqueado esperando um cliente terminar.</p>
- *
- * <p>O que fazer com cada conexão é definido pelo {@code clientHandler}
- * recebido no construtor. Na issue #3 ele passa a ser o {@code ClientHandler}
- * que interpreta os comandos SUB/UNSUB/PUB.</p>
+ * Servidor TCP do broker: aceita conexões e atende cada cliente em uma thread do pool.
  */
 public class BrokerServer {
 
@@ -33,17 +24,13 @@ public class BrokerServer {
     private final int port;
     private final Consumer<Socket> clientHandler;
     private final ExecutorService pool;
-    // Sockets dos clientes em atendimento: o stop() fecha todos para destravar
-    // as threads paradas no readLine() (interromper a thread não basta).
+    // [APRESENTAÇÃO] O stop() fecha estes sockets porque interromper a thread não destrava um readLine() bloqueado.
     private final Set<Socket> clientesConectados = ConcurrentHashMap.newKeySet();
 
     private volatile ServerSocket serverSocket;
     private volatile boolean running;
 
-    /**
-     * @param port          porta TCP onde o broker vai escutar (0 = porta livre escolhida pelo sistema)
-     * @param clientHandler ação executada, em uma thread do pool, para cada cliente conectado
-     */
+    /** Cria o servidor na porta informada (0 = porta livre escolhida pelo sistema). */
     public BrokerServer(int port, Consumer<Socket> clientHandler) {
         if (port < 0 || port > 65535) {
             throw new IllegalArgumentException("Porta inválida: " + port);
@@ -53,15 +40,11 @@ public class BrokerServer {
         }
         this.port = port;
         this.clientHandler = clientHandler;
-        // Pool que cria threads sob demanda e reaproveita as ociosas:
-        // um cliente lento nunca impede outro de ser atendido.
+        // [APRESENTAÇÃO] Uma thread por cliente: o readLine() bloqueante de um cliente não trava o accept() nem os outros.
         this.pool = Executors.newCachedThreadPool();
     }
 
-    /**
-     * Abre o ServerSocket e fica aceitando conexões até {@link #stop()} ser chamado.
-     * Este método bloqueia a thread que o chamou.
-     */
+    /** Abre o ServerSocket e aceita conexões até {@link #stop()}; bloqueia a thread que o chamou. */
     public void start() throws IOException {
         serverSocket = new ServerSocket(port);
         running = true;
@@ -82,35 +65,18 @@ public class BrokerServer {
                 }
                 pool.submit(() -> atender(client));
             } catch (RejectedExecutionException e) {
-                // pool já encerrado pelo stop(); o laço termina na próxima verificação
                 fecharClientesConectados();
             } catch (SocketException e) {
-                // accept() lança SocketException quando o ServerSocket é fechado pelo stop()
                 if (running && !serverSocket.isClosed()) {
                     LOG.log(Level.SEVERE, "Erro no ServerSocket", e);
                 }
             } catch (IOException e) {
-                // Falha ao aceitar UM cliente não derruba o broker
                 LOG.log(Level.WARNING, "Erro ao aceitar conexão", e);
             }
         }
     }
 
-    /** Executa o handler e garante que o socket do cliente seja fechado no final. */
-    private void atender(Socket client) {
-        try (client) {
-            clientHandler.accept(client);
-        } catch (Exception e) {
-            LOG.log(Level.WARNING, "Erro ao atender cliente " + client.getRemoteSocketAddress(), e);
-        } finally {
-            clientesConectados.remove(client);
-        }
-    }
-
-    /**
-     * Para de aceitar conexões, fecha o ServerSocket, desconecta os clientes ainda
-     * conectados e encerra o pool de threads.
-     */
+    /** Para de aceitar conexões, fecha o ServerSocket e os sockets dos clientes e encerra o pool. */
     public void stop() {
         running = false;
         try {
@@ -120,7 +86,6 @@ public class BrokerServer {
         } catch (IOException e) {
             LOG.log(Level.WARNING, "Erro ao fechar o ServerSocket", e);
         }
-        // Fechar o socket faz o readLine() do handler lançar exceção e a thread terminar
         fecharClientesConectados();
         pool.shutdownNow();
         try {
@@ -129,6 +94,25 @@ public class BrokerServer {
             Thread.currentThread().interrupt();
         }
         LOG.info("Broker encerrado");
+    }
+
+    /** Porta em que o broker está escutando de fato (útil quando foi iniciado com porta 0). */
+    public int getLocalPort() {
+        return serverSocket != null ? serverSocket.getLocalPort() : -1;
+    }
+
+    public boolean isRunning() {
+        return running;
+    }
+
+    private void atender(Socket client) {
+        try (client) {
+            clientHandler.accept(client);
+        } catch (Exception e) {
+            LOG.log(Level.WARNING, "Erro ao atender cliente " + client.getRemoteSocketAddress(), e);
+        } finally {
+            clientesConectados.remove(client);
+        }
     }
 
     private void fecharClientesConectados() {
@@ -143,14 +127,5 @@ public class BrokerServer {
         } catch (IOException e) {
             // ignorado: o cliente já está sendo desconectado
         }
-    }
-
-    /** Porta em que o broker está escutando de fato (útil quando foi iniciado com porta 0). */
-    public int getLocalPort() {
-        return serverSocket != null ? serverSocket.getLocalPort() : -1;
-    }
-
-    public boolean isRunning() {
-        return running;
     }
 }

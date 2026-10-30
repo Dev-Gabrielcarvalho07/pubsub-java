@@ -15,13 +15,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- * Atende UM cliente conectado ao broker (publisher, subscriber ou os dois).
- *
- * <p>{@link #run()} lê os comandos do cliente e repassa ao {@link TopicRegistry}. Como o handler também é um
- * {@link Subscriber}, é ele mesmo que se inscreve nos tópicos e recebe, via {@link #send(Message)}, as mensagens
- * MSG que o registry entrega.</p>
- *
- * <p>Quem fecha o socket é o {@link BrokerServer}, quando {@code run()} termina.</p>
+ * Atende um cliente: repassa seus comandos ao {@link TopicRegistry} e, como {@link Subscriber}, recebe as MSG dele.
  */
 public class ClientHandler implements Subscriber, Runnable {
 
@@ -32,9 +26,7 @@ public class ClientHandler implements Subscriber, Runnable {
     private final BufferedWriter out;
     private final String remoteAddress;
 
-    /**
-     * @throws UncheckedIOException se não for possível abrir o canal de saída do socket
-     */
+    /** Prepara a saída do socket; lança UncheckedIOException se não conseguir abri-la. */
     public ClientHandler(Socket socket, TopicRegistry registry) {
         if (socket == null) {
             throw new IllegalArgumentException("socket não pode ser nulo");
@@ -52,9 +44,7 @@ public class ClientHandler implements Subscriber, Runnable {
         }
     }
 
-    /**
-     * Lê os comandos do cliente até ele desconectar. Ao terminar, sempre remove o cliente de todos os tópicos.
-     */
+    /** Lê os comandos do cliente até ele desconectar. */
     @Override
     public void run() {
         try {
@@ -65,12 +55,31 @@ public class ClientHandler implements Subscriber, Runnable {
                 handleLine(line);
             }
         } catch (IOException e) {
-            // cliente caiu sem fechar a conexão; tratado como desconexão
             LOG.log(Level.FINE, "Erro de rede com o cliente " + this, e);
         } finally {
+            // [APRESENTAÇÃO] Se o cliente cai, readLine() devolve null ou lança IOException e ele sai de todos os tópicos aqui.
             registry.removeFromAll(this);
             LOG.info("Cliente desconectado: " + this);
         }
+    }
+
+    /** Escreve a mensagem no socket do cliente; falhas de escrita viram UncheckedIOException. */
+    // [APRESENTAÇÃO] synchronized: vários publishers, cada um na sua thread, podem chamar send() deste cliente ao mesmo tempo sem misturar as linhas.
+    @Override
+    public synchronized void send(Message message) {
+        try {
+            out.write(Protocol.encode(message));
+            out.write('\n');
+            out.flush();
+        } catch (IOException e) {
+            throw new UncheckedIOException("Falha ao enviar mensagem ao cliente " + this, e);
+        }
+    }
+
+    /** Endereço remoto do cliente, usado para identificá-lo nos logs. */
+    @Override
+    public String toString() {
+        return remoteAddress;
     }
 
     private void handleLine(String line) {
@@ -87,34 +96,10 @@ public class ClientHandler implements Subscriber, Runnable {
                 case SUB -> registry.subscribe(message.topic(), this);
                 case UNSUB -> registry.unsubscribe(message.topic(), this);
                 case PUB -> registry.publish(message.topic(), message.payload());
-                // MSG é só do broker para o subscriber; cliente não pode enviar
                 case MSG -> LOG.warning("[" + this + "] Comando MSG recusado: só o broker envia MSG");
             }
         } catch (IllegalArgumentException e) {
             LOG.warning("[" + this + "] Comando recusado: " + e.getMessage());
         }
-    }
-
-    /**
-     * Envia a mensagem ao cliente. Sincronizado para que publicações simultâneas, vindas de threads de outros
-     * clientes, não misturem as linhas.
-     *
-     * @throws UncheckedIOException se a escrita falhar (o {@link TopicRegistry} trata isso por inscrito)
-     */
-    @Override
-    public synchronized void send(Message message) {
-        try {
-            out.write(Protocol.encode(message));
-            out.write('\n');
-            out.flush();
-        } catch (IOException e) {
-            throw new UncheckedIOException("Falha ao enviar mensagem ao cliente " + this, e);
-        }
-    }
-
-    /** Endereço remoto do cliente, para identificar o cliente nos logs. */
-    @Override
-    public String toString() {
-        return remoteAddress;
     }
 }
