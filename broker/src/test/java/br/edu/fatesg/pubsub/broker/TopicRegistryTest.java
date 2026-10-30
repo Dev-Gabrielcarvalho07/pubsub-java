@@ -84,4 +84,10 @@ class TopicRegistryTest {
         assertThrows(IllegalArgumentException.class, () -> registry.subscribe(" ", cliente));
         assertThrows(IllegalArgumentException.class, () -> registry.subscribe("esportes", null));
     }
+
+    @Test
+    void publishRecusaConteudoNuloOuVazio() {
+        assertThrows(IllegalArgumentException.class, () -> registry.publish("esportes", null));
+        assertThrows(IllegalArgumentException.class, () -> registry.publish("esportes", ""));
+    }
 }

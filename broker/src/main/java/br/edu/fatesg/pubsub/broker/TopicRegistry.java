@@ -33,7 +33,13 @@ public class TopicRegistry {
     /** SUB: inscreve o cliente no tópico. Inscrever duas vezes não duplica. */
     public void subscribe(String topic, Subscriber subscriber) {
         validar(topic, subscriber);
-        topics.computeIfAbsent(topic, t -> new CopyOnWriteArraySet<>()).add(subscriber);
+        // O add fica dentro do compute para ser atômico junto com o remover():
+        // assim o cliente nunca é adicionado num conjunto que acabou de sair do mapa.
+        topics.compute(topic, (t, inscritos) -> {
+            Set<Subscriber> conjunto = (inscritos == null) ? new CopyOnWriteArraySet<>() : inscritos;
+            conjunto.add(subscriber);
+            return conjunto;
+        });
         LOG.info("SUB: cliente inscrito no tópico '" + topic + "'");
     }
 
@@ -50,6 +56,10 @@ public class TopicRegistry {
      * @return quantos inscritos receberam a mensagem
      */
     public int publish(String topic, String payload) {
+        // Valida uma vez aqui; senão o Protocol.encode falharia uma vez para cada inscrito
+        if (payload == null || payload.isEmpty()) {
+            throw new IllegalArgumentException("payload não pode ser nulo nem vazio");
+        }
         Message message = new Message(Command.MSG, topic, payload);
         Set<Subscriber> inscritos = topics.getOrDefault(topic, Set.of());
 
