@@ -4,6 +4,8 @@ import java.util.regex.Pattern;
 
 /**
  * Codifica e decodifica mensagens do protocolo de texto (uma mensagem por linha).
+ * É o único contrato compartilhado por broker, publishers e subscribers: publisher e subscriber não se
+ * conhecem, e a classe, sem estado, pode ser usada ao mesmo tempo por várias threads.
  *
  * <pre>
  * SUB|topico
@@ -14,6 +16,7 @@ import java.util.regex.Pattern;
  */
 public final class Protocol {
 
+    /** Separador entre os campos de uma linha do protocolo. */
     public static final String SEPARATOR = "|";
 
     private static final Pattern SEPARATOR_PATTERN = Pattern.compile(Pattern.quote(SEPARATOR));
@@ -23,11 +26,13 @@ public final class Protocol {
 
     /**
      * Transforma a mensagem na linha de texto do protocolo (sem quebra de linha no final).
+     * Usado por quem envia: publisher (PUB), subscriber (SUB/UNSUB) e broker (MSG).
      */
     public static String encode(Message msg) {
         if (msg == null) {
             throw new IllegalArgumentException("mensagem não pode ser nula");
         }
+        // O tópico é sempre o segundo campo; se contivesse o separador, o decode o cortaria errado.
         if (msg.topic().contains(SEPARATOR)) {
             throw new IllegalArgumentException("topic não pode conter o separador '" + SEPARATOR + "': " + msg.topic());
         }
@@ -53,12 +58,15 @@ public final class Protocol {
 
     /**
      * Interpreta uma linha do protocolo. O conteúdo de PUB e MSG pode conter o separador.
+     * Usado por quem recebe: o broker (SUB/UNSUB/PUB) e o subscriber (MSG).
      */
     public static Message decode(String line) {
         if (line == null || line.isBlank()) {
             throw new IllegalArgumentException("linha não pode ser nula nem vazia");
         }
 
+        // [APRESENTAÇÃO] Limite de 3 partes: comando, tópico e o resto da linha como conteúdo,
+        // assim o conteúdo pode conter "|" sem ser quebrado. Por isso o tópico não pode ter "|".
         String[] parts = SEPARATOR_PATTERN.split(line, 3);
         Command command = parseCommand(parts[0], line);
 
@@ -85,6 +93,8 @@ public final class Protocol {
         }
     }
 
+    // [APRESENTAÇÃO] TCP é um fluxo de bytes sem fronteiras de mensagem; o enquadramento é feito
+    // pela quebra de linha (readLine), então nenhum campo pode conter \n ou \r.
     private static boolean containsLineBreak(String value) {
         return value.indexOf('\n') >= 0 || value.indexOf('\r') >= 0;
     }
